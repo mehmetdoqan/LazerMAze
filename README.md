@@ -9,7 +9,7 @@ Kilitli aynalar hareket ettirilemez.
 Tüm hedefler en az bir kez vurulmalıdır.
 Bölüm tamamlanmadan ilerleme olmaz.
 
-Your site is live at https://mehmetdoqan.github.io/LazerMAze/
+Your site is live at https://mehmetdoqan.github.io/LazerMAze/Index.html
 Last deployed by @mehmetdoqan 
 
 
