@@ -1,0 +1,1221 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Laser Maze Editor – Math Engine v17.4.4</title>
+<style>
+:root{
+  --bg:#0b0e11; --panel:#161b22; --border:#30363d;
+  --grid:#0d1117; --cell:#21262d; --text:#c9d1d9;
+  --laser:#ff4fd8; --mirror:#58a6ff; --warn:#f85149; --target:#ffd84d;
+  --mirrorBody:#7fb9e6; --mirrorEdge:#bfe6ff;
+  --cellSize:70px; --gap:6px; --pad:16px;
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--text); font-family:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; overflow:hidden}
+#app{height:100vh; display:grid; grid-template-columns:340px 1fr}
+.sidebar{padding:24px; border-right:1px solid var(--border); display:flex; flex-direction:column; gap:14px}
+h2{margin:0; font-size:18px; letter-spacing:.5px}
+.tool-group{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px}
+button{background:var(--cell); border:1px solid var(--border); color:var(--text); padding:10px; border-radius:8px; cursor:pointer; font-size:12px}
+button.active{border-color:var(--laser); background:rgba(255, 79, 216, 0.12); color:var(--laser)}
+button.secondary.active{border-color:var(--mirror); background:rgba(88, 166, 255, 0.12); color:var(--mirror)}
+#status{background:#0d1117; padding:12px; border-radius:8px; font-size:12px; border:1px solid var(--border); display:flex; flex-direction:column; gap:6px}
+#toast{min-height:16px; font-size:11px; color:#8b949e}
+kbd{border:1px solid var(--border); border-bottom-width:2px; padding:1px 6px; border-radius:6px; background:#0d1117; font-size:11px}
+#stage{display:flex; align-items:center; justify-content:center; overflow:auto}
+#grid-container{position:relative; background:var(--grid); padding:var(--pad); border-radius:14px; border:1px solid var(--border)}
+#grid{display:grid; gap:var(--gap); position:relative; z-index:1}
+.cell{width:var(--cellSize); height:var(--cellSize); background:var(--cell); border-radius:6px; position:relative; display:flex; align-items:center; justify-content:center}
+.cell:hover{outline:1px solid rgba(255,255,255,.08)}
+.cell.drag-over{outline:2px solid var(--mirror)}
+canvas{position:absolute; top:var(--pad); left:var(--pad); pointer-events:none; z-index:2}
+.rot{transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); width:84%; height:84%; display:flex; align-items:center; justify-content:center}
+.badge{display:inline-block; padding:1px 6px; border-radius:999px; border:1px solid var(--border); font-size:11px; color:#8b949e}
+hr{border:0; border-top:1px solid var(--border); margin:6px 0}
+
+.modal{
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  pointer-events: none; /* board görünür kalsın */
+}
+.modal.hidden{ display:none; }
+.modal-card{
+
+  min-width: 260px;
+  max-width: 360px;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  background: rgba(25,28,34,.92);
+  border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 18px 60px rgba(0,0,0,.6);
+  pointer-events: auto;
+}
+.modal-title{
+  font-weight: 700;
+  letter-spacing: .2px;
+  margin-bottom: 6px;
+}
+.modal-msg{
+  opacity: .9;
+  font-size: 13px;
+  line-height: 1.35;
+  margin-bottom: 10px;
+}
+
+select{
+  width:100%;
+  background:var(--cell);
+  border:1px solid var(--border);
+  color:var(--text);
+  padding:10px;
+  border-radius:8px;
+  font-size:12px;
+}
+.levels{
+  background:#0d1117;
+  padding:12px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.levels .row{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.levels label{font-size:11px; color:#8b949e}
+.levels .meta{font-size:11px; color:#8b949e; line-height:1.35}
+.levels .meta b{color:var(--text); font-weight:700}
+
+
+.lock-icon{
+  position:absolute;
+  top:6px;
+  right:6px;
+  font-size:14px;
+  line-height:1;
+  opacity:.9;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.6));
+  user-select:none;
+  pointer-events:none;
+}
+input[type="number"]{
+  width:100%;
+  background:var(--cell);
+  border:1px solid var(--border);
+  color:var(--text);
+  padding:10px;
+  border-radius:8px;
+  font-size:12px;
+}
+
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="sidebar">
+    <h2>MATH ENGINE <span style="color:var(--laser)">v15</span></h2>
+
+    <div class="tool-group">
+      <button onclick="setTool('laser')" id="btn-laser">Lazer</button>
+      <button onclick="setTool('target')" id="btn-target">Hedef</button>
+      <button onclick="setTool('mirror')" id="btn-mirror">Ayna</button>
+      <button onclick="setTool('block')" id="btn-block">Engel</button>
+      <button onclick="setTool('erase')" id="btn-erase" class="secondary">Silgi</button>
+      <button onclick="toggleDebug()" id="btn-debug" class="secondary">Debug</button>
+    </div>
+
+    <div id="status">
+      <div><span class="badge">Kısayollar</span></div>
+      <div><kbd>Shift</kbd> + Tık = Döndür</div>
+      <div><kbd>Sağ Tık</kbd> = Sil</div>
+      <hr/>
+      <div id="status-line">Hedef: 0/0</div>
+      <div id="toast"></div>
+    </div>
+
+    <div style="font-size:11px; color:#8b949e; line-height:1.45">
+      Notlar:
+      <ul style="margin:8px 0 0 16px; padding:0">
+        <li>CSS ölçülerinden otomatik okunur (hardcode yok).</li>
+        <li>Hücre erişimi O(1) (gridMap).</li>
+        <li>Lazer hesaplama: tile tabanlı ray casting + deterministik ayna.</li>
+      </ul>
+    </div>
+
+
+    <div class="levels" id="levelsBox">
+      <div class="row">
+        <div>
+          <label for="levelSel">Seviye</label>
+          <select id="levelSel">
+            <option value="kolay">Kolay</option>
+            <option value="orta">Orta</option>
+            <option value="zor">Zor</option>
+            <option value="cok">Çok</option>
+          </select>
+        </div>
+        <div>
+          <label for="partSel">Bölüm</label>
+          <select id="partSel"></select>
+        </div>
+      </div>
+      <div class="tool-group" style="grid-template-columns:1fr 1fr 1fr">
+        <button id="btn-load" class="secondary">Yükle</button>
+        <button id="btn-save" class="secondary">Kaydet</button>
+        <button id="btn-clearSlot" style="color:var(--warn)">Sil</button>
+      </div>
+      <div class="meta" id="slotInfo">Seçili: <b>-</b></div>
+    </div>
+
+
+
+    <div class="levels" style="margin-top:10px">
+      <div class="meta"><b>Toplu Dışa Aktar / İçe Aktar</b></div>
+      <div class="tool-group" style="grid-template-columns:1fr 1fr 1fr">
+        <button id="btn-exportAll" class="secondary">Export JSON</button>
+        <button id="btn-importAll" class="secondary">Import JSON</button>
+        <button id="btn-clearAll" style="color:var(--warn)">Hepsini Sil</button>
+      </div>
+      <input id="fileImport" type="file" accept="application/json" style="display:none" />
+      <div class="meta" id="bulkInfo">Kayıtlı slot: <b>-</b></div>
+    </div>
+
+
+
+    <div class="levels" style="margin-top:10px">
+      <div class="meta"><b>Grid Boyutu</b> <span class="badge" style="margin-left:6px">4–16</span></div>
+      <div class="row">
+        <div>
+          <label for="rowsInp">Satır</label>
+          <input id="rowsInp" type="number" min="4" max="16" step="1" />
+        </div>
+        <div>
+          <label for="colsInp">Sütun</label>
+          <input id="colsInp" type="number" min="4" max="16" step="1" />
+        </div>
+      </div>
+      <div class="tool-group" style="grid-template-columns:1fr 1fr">
+        <button id="btn-applyGrid" class="secondary">Uygula</button>
+        <button id="btn-fit8" class="secondary">8×8</button>
+      </div>
+      <div class="meta">Kısayol: <kbd>Alt</kbd> + Tık = Kilit aç/kapat</div>
+    </div>
+
+
+    <button onclick="resetAll()" style="margin-top:auto; color:var(--warn)">TEMİZLE</button>
+  </div>
+
+  <div id="stage">
+    <div id="grid-container">
+      <div id="grid"></div>
+      <canvas id="cv"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+/**
+ * Motor hedefleri:
+ * 1) CSS ölçülerini oku (hardcode kaldır)
+ * 2) gridMap ile O(1) erişim
+ * 3) Piksel adımı yok: tile tabanlı ray casting (axis-aligned, diagonal mirror)
+ * 4) Ayna modeli: iki tip ('\\' ve '/'), rotasyon sadece görünüm için
+ * 5) Silgi + tutarlı tıklama davranışı
+ * 6) ResizeObserver ile canvas hizası
+ * 7) Target id ile hit takibi
+ * 8) Debug görselleştirme (opsiyonel)
+ */
+
+const STATE = {
+  rows: 8,
+  cols: 8,
+  tool: 'laser',
+  debug: false,
+  dashOffset: 0,
+  nextTargetId: 1,
+  gridMap: new Map(), // key "x,y" => {type, x, y, ...}
+  drag: null, // {obj, from:{x,y}}
+  suppressClick: false,
+  lastHitCount: 0,
+  lastWinAt: 0,
+};
+
+
+// --- Modal (Hedefe Ulaştınız) ---
+const MODAL = {
+  el: null,
+  msg: null,
+  ok: null,
+  open: false
+};
+
+function initModal(){
+  MODAL.el = document.getElementById('winModal');
+  MODAL.msg = document.getElementById('winMsg');
+  MODAL.ok = document.getElementById('winOk');
+  if(!MODAL.el) return;
+  const close = ()=> hideWinModal();
+  MODAL.ok?.addEventListener('click', close);
+  MODAL.el.addEventListener('click', (e)=>{ if(e.target===MODAL.el) close(); });
+  window.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && MODAL.open) close(); });
+}
+
+function showWinModal(text){
+  if(!MODAL.el) return;
+  MODAL.msg.textContent = text || 'Tebrikler!';
+  MODAL.el.classList.remove('hidden');
+  MODAL.open = true;
+  // otomatik kapanma (ışın görünmeye devam eder)
+  clearTimeout(MODAL._t);
+  MODAL._t = setTimeout(()=>{ if(MODAL.open) hideWinModal(); }, 1600);
+}
+
+function hideWinModal(){
+  if(!MODAL.el) return;
+  MODAL.el.classList.add('hidden');
+  MODAL.open = false;
+}
+
+
+
+// --- Bölüm Sistemi (4 seviye x 20 bölüm) ---
+const LEVELS = [
+  {key:'kolay', label:'Kolay'},
+  {key:'orta',  label:'Orta'},
+  {key:'zor',   label:'Zor'},
+  {key:'cok',   label:'Çok'},
+];
+const STORAGE_KEY = 'laserMaze.levels.v1';
+
+const LEVEL_STATE = {
+  level: 'kolay',
+  part: 1,
+};
+
+function slotKey(level, part){ return `${level}:${part}`; }
+
+function loadAllSlots(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  }catch(_){ return {}; }
+}
+
+function saveAllSlots(obj){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+}
+
+function serializeState(){
+  const items = Array.from(STATE.gridMap.values()).map(o => {
+    // only store plain data
+    const out = {};
+    for(const k in o){
+      const v = o[k];
+      if(typeof v !== 'function') out[k] = v;
+    }
+    return out;
+  });
+  return {
+    rows: STATE.rows,
+    cols: STATE.cols,
+    items,
+  };
+}
+
+function applySerialized(data){
+  STATE.gridMap.clear();
+  STATE.nextTargetId = 1;
+
+  // Grid boyutu dosyadan geliyorsa uygula
+  if(data && typeof data.rows === 'number' && typeof data.cols === 'number'){
+    STATE.rows = clamp(data.rows, 4, 16);
+    STATE.cols = clamp(data.cols, 4, 16);
+  }
+
+  if(!data || !Array.isArray(data.items)) return;
+
+  for(const o of data.items){
+    if(typeof o?.x !== 'number' || typeof o?.y !== 'number' || !o?.type) continue;
+    // sanitize
+    if(!inBounds(o.x,o.y)) continue;
+    setCell(o);
+    if(o.type === 'target' && typeof o.id === 'number'){
+      STATE.nextTargetId = Math.max(STATE.nextTargetId, o.id + 1);
+    }
+  }
+}
+
+function refreshSlotInfo(){
+  const info = document.getElementById('slotInfo');
+  if(!info) return;
+  const levelLabel = (LEVELS.find(l=>l.key===LEVEL_STATE.level)?.label) || LEVEL_STATE.level;
+  const part = LEVEL_STATE.part;
+  const all = loadAllSlots();
+  const slot = all[slotKey(LEVEL_STATE.level, part)];
+  const has = !!slot;
+  info.innerHTML = `Seçili: <b>${levelLabel} / ${part}</b> — ${has ? 'Kayıt var' : 'Boş'}`;
+  const btnSave = document.getElementById('btn-save');
+  const btnLoad = document.getElementById('btn-load');
+  const btnClear = document.getElementById('btn-clearSlot');
+  if(btnSave) btnSave.disabled = !(LEVEL_STATE.level && part);
+  if(btnLoad) btnLoad.disabled = !(LEVEL_STATE.level && part);
+  if(btnClear) btnClear.disabled = !(LEVEL_STATE.level && part);
+}
+
+function saveSlot(){
+  const all = loadAllSlots();
+  all[slotKey(LEVEL_STATE.level, LEVEL_STATE.part)] = serializeState();
+  saveAllSlots(all);
+  toast('Bölüm kaydedildi.');
+  refreshSlotInfo();
+}
+
+function loadSlot(){
+  const all = loadAllSlots();
+  const slot = all[slotKey(LEVEL_STATE.level, LEVEL_STATE.part)];
+  if(!slot){
+    toast('Bu bölüm boş.', true);
+    return;
+  }
+  applySerialized(slot);
+  toast('Bölüm yüklendi.');
+  render();
+  refreshSlotInfo();
+}
+
+function clearSlot(){
+  const all = loadAllSlots();
+  const k = slotKey(LEVEL_STATE.level, LEVEL_STATE.part);
+  if(all[k]){
+    delete all[k];
+    saveAllSlots(all);
+    toast('Bölüm kaydı silindi.');
+  }else{
+    toast('Bu bölüm zaten boş.', true);
+  }
+  refreshSlotInfo();
+}
+
+function initLevelUI(){
+  const partSel = document.getElementById('partSel');
+  const levelSel = document.getElementById('levelSel');
+  if(partSel){
+    partSel.innerHTML = '';
+    for(let i=1;i<=20;i++){
+      const opt=document.createElement('option');
+      opt.value=String(i);
+      opt.textContent = `Bölüm ${i}`;
+      partSel.appendChild(opt);
+    }
+    partSel.value = String(LEVEL_STATE.part);
+    partSel.addEventListener('change', ()=>{
+      LEVEL_STATE.part = parseInt(partSel.value,10) || 1;
+      refreshSlotInfo();
+    });
+  }
+  if(levelSel){
+    levelSel.value = LEVEL_STATE.level;
+    levelSel.addEventListener('change', ()=>{
+      LEVEL_STATE.level = levelSel.value;
+      refreshSlotInfo();
+    });
+  }
+  document.getElementById('btn-save')?.addEventListener('click', saveSlot);
+  document.getElementById('btn-load')?.addEventListener('click', loadSlot);
+  document.getElementById('btn-clearSlot')?.addEventListener('click', clearSlot);
+
+  refreshSlotInfo();
+}
+
+
+const DIRS = ["E","S","W","N"];
+const DIRS8 = ["E","SE","S","SW","W","NW","N","NE"];
+const DIR_VEC8 = { N:{dx:0,dy:-1}, NE:{dx:1,dy:-1}, E:{dx:1,dy:0}, SE:{dx:1,dy:1}, S:{dx:0,dy:1}, SW:{dx:-1,dy:1}, W:{dx:-1,dy:0}, NW:{dx:-1,dy:-1} };
+function dirAngle(dir){ const i=DIRS8.indexOf(dir); return i<0?0:i*45; }
+
+const DIR_VEC = { N:{dx:0,dy:-1}, E:{dx:1,dy:0}, S:{dx:0,dy:1}, W:{dx:-1,dy:0} };
+
+function key(x,y){ return `${x},${y}`; }
+function inBounds(x,y){ return x>=0 && x<STATE.cols && y>=0 && y<STATE.rows; }
+function getCell(x,y){ return STATE.gridMap.get(key(x,y)); }
+function setCell(obj){ STATE.gridMap.set(key(obj.x,obj.y), obj); }
+function delCell(x,y){ STATE.gridMap.delete(key(x,y)); }
+
+function readLayoutVars(){
+  const rs = getComputedStyle(document.documentElement);
+  const cs = parseFloat(rs.getPropertyValue('--cellSize')) || 70;
+  const gap = parseFloat(rs.getPropertyValue('--gap')) || 6;
+  const pad = parseFloat(rs.getPropertyValue('--pad')) || 16;
+  return { cs, gap, pad, pitch: cs + gap };
+}
+
+function toast(msg, isWarn=false){
+  const el = document.getElementById('toast');
+  el.textContent = msg || '';
+  el.style.color = isWarn ? 'var(--warn)' : '#8b949e';
+  if(msg){
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=>{ el.textContent=''; el.style.color='#8b949e'; }, 1400);
+  }
+}
+
+function setTool(t){
+  STATE.tool = t;
+  document.querySelectorAll('.tool-group button').forEach(b=>b.classList.remove('active'));
+  const btn = document.getElementById('btn-'+t);
+  if(btn) btn.classList.add('active');
+  // Debug butonu tool değil, ayrıca işaretlenir.
+  document.getElementById('btn-debug').classList.toggle('active', STATE.debug);
+  toast(`Araç: ${t}`);
+}
+
+function toggleDebug(){
+  STATE.debug = !STATE.debug;
+  document.getElementById('btn-debug').classList.toggle('active', STATE.debug);
+  toast(STATE.debug ? 'Debug açık' : 'Debug kapalı');
+}
+
+function resetAll(){
+  STATE.gridMap.clear();
+  STATE.nextTargetId = 1;
+  render();
+}
+
+function getAllByType(type){
+  const out = [];
+  for(const obj of STATE.gridMap.values()){
+    if(obj.type === type) out.push(obj);
+  }
+  return out;
+}
+
+function render(){
+  const g = document.getElementById("grid");
+  const {cs} = readLayoutVars();
+  g.style.gridTemplateColumns = `repeat(${STATE.cols}, var(--cellSize))`;
+  g.innerHTML = "";
+
+  for(let y=0; y<STATE.rows; y++){
+    for(let x=0; x<STATE.cols; x++){
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      cell.oncontextmenu = (e)=>{ e.preventDefault(); eraseAt(x,y); };
+      cell.onclick = (e)=> handleCellClick(x,y,e);
+      cell.onpointerdown = (e)=> handlePointerDown(x,y,e);
+
+      const obj = getCell(x,y);
+      if(obj){
+        const el = document.createElement("div");
+        el.className = "rot";
+        // Görseller
+        if(obj.type==='laser'){
+          el.style.transform = `rotate(${dirAngle(obj.dir)}deg)`;
+          el.innerHTML = `
+            <svg viewBox="0 0 100 100" width="${cs*0.8}" height="${cs*0.8}">
+              <circle cx="50" cy="50" r="28" fill="none" stroke="var(--laser)" stroke-width="8"/>
+              <line x1="50" y1="50" x2="90" y2="50" stroke="var(--laser)" stroke-width="8" stroke-linecap="round"/>
+            </svg>`;
+        } else if(obj.type==='mirror'){
+          el.style.transform = `rotate(${obj.rot*90}deg)`;
+          el.innerHTML = `
+            <svg viewBox="0 0 100 100" width="${cs*0.9}" height="${cs*0.9}">
+              <!-- Base orientation (rot=0): '\\' diagonal. Filled triangle is the BACK (opaque). -->
+              <!-- For rot=0, back is the TOP-RIGHT half (v <= u). -->
+              <polygon points="0,0 100,0 100,100" fill="var(--mirrorBody)"/>
+              <line x1="0" y1="0" x2="100" y2="100" stroke="var(--mirrorEdge)" stroke-width="10" stroke-linecap="round"/>
+            </svg>`;
+        } else if(obj.type==='target'){
+          el.innerHTML = `<div style="color:var(--target); font-size:34px; line-height:1">★</div>`;
+        } else if(obj.type==='block'){
+          el.innerHTML = `<div style="background:#000; width:100%; height:100%; border-radius:6px"></div>`;
+        }
+        cell.appendChild(el);
+        // Kilit ikonu (ayna/engel)
+        if((obj.type==='mirror' || obj.type==='block') && obj.locked){
+          const lk=document.createElement('div');
+          lk.className='lock-icon';
+          lk.textContent='🔒';
+          cell.appendChild(lk);
+        }
+      }
+      g.appendChild(cell);
+    }
+  }
+  syncCanvasToGrid();
+  updateStatus(new Set());
+}
+
+function syncCanvasToGrid(){
+  const g = document.getElementById("grid");
+  const cv = document.getElementById("cv");
+  cv.width = g.clientWidth;
+  cv.height = g.clientHeight;
+}
+
+function eraseAt(x,y){
+  if(getCell(x,y)){
+    delCell(x,y);
+    render();
+    toast('Silindi');
+  }
+}
+
+// --- Drag & Drop (Ayna taşıma) ---
+function cellFromClientPoint(clientX, clientY){
+  const grid = document.getElementById('grid');
+  const r = grid.getBoundingClientRect();
+  const {cs, gap, pitch} = readLayoutVars();
+  const lx = clientX - r.left;
+  const ly = clientY - r.top;
+  if(lx < 0 || ly < 0 || lx >= r.width || ly >= r.height) return null;
+  const gx = Math.floor(lx / pitch);
+  const gy = Math.floor(ly / pitch);
+  const rx = lx - gx * pitch;
+  const ry = ly - gy * pitch;
+  // gap alanında ise yok say
+  if(rx > cs || ry > cs) return null;
+  if(!inBounds(gx,gy)) return null;
+  return {x: gx, y: gy};
+}
+
+function handlePointerDown(x,y,e){
+  // Sağ tık / pen vb. eraseAt zaten contextmenu ile var
+  if(e.button !== 0) return;
+  // Shift + tık döndürmeye ayrılmış; drag başlatma
+  if(e.shiftKey) return;
+  const obj = getCell(x,y);
+  if(!obj || (obj.type !== 'mirror' && obj.type !== 'block')) return;
+  if(obj.locked){ toast('Kilitli öğe', true); return; }
+
+  // Ayna/Engel sürükleme
+  STATE.drag = { obj, from: {x: obj.x, y: obj.y} };
+  STATE.suppressClick = true;
+  try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){ }
+  e.preventDefault();
+}
+
+function handlePointerMove(e){
+  if(!STATE.drag) return;
+  const cell = cellFromClientPoint(e.clientX, e.clientY);
+  // Basit görsel geri bildirim: imleç üzerinde geçici outline
+  document.querySelectorAll('.cell.drag-over').forEach(el=>el.classList.remove('drag-over'));
+  if(!cell) return;
+  const idx = cell.y*STATE.cols + cell.x;
+  const el = document.getElementById('grid').children[idx];
+  if(el) el.classList.add('drag-over');
+}
+
+function handlePointerUp(e){
+  if(!STATE.drag) return;
+  const {obj, from} = STATE.drag;
+  STATE.drag = null;
+  document.querySelectorAll('.cell.drag-over').forEach(el=>el.classList.remove('drag-over'));
+
+  const drop = cellFromClientPoint(e.clientX, e.clientY);
+  if(!drop){
+    return; // grid dışında bıraktı -> iptal
+  }
+  const {x,y} = drop;
+  // Aynı yere bırakıldıysa
+  if(x === from.x && y === from.y) return;
+  // Dolu hücreye bırakma engeli
+  const there = getCell(x,y);
+  if(there){
+    toast('Bu hücre dolu', true);
+    return;
+  }
+  // Taşı
+  delCell(from.x, from.y);
+  obj.x = x; obj.y = y;
+  setCell(obj);
+  render();
+  toast('Ayna taşındı');
+}
+
+function rotateAt(x,y){
+  const obj = getCell(x,y);
+  if(!obj) return;
+
+  if(obj.type==='laser'){
+    obj.dir = DIRS8[(DIRS8.indexOf(obj.dir)+1)%8];
+    setCell(obj);
+    render();
+  } else if(obj.type==='mirror'){
+    if(obj.locked){ toast('Kilitli ayna', true); return; }
+    obj.rot = (obj.rot+1)%4;
+    setCell(obj);
+    render();
+  } else if(obj.type==='block'){
+    toast('Engel döndürülemez', true);
+    return;
+  }
+}
+
+function placeAt(x,y){
+  if(getCell(x,y)){
+    toast('Hücre dolu (Silgi veya sağ tık ile sil)', true);
+    return;
+  }
+  if(STATE.tool==='laser') setCell({type:'laser', x, y, dir:'E'});
+  else if(STATE.tool==='mirror') setCell({type:'mirror', x, y, rot:0, locked:false});
+  else if(STATE.tool==='boxmirror') setCell({type:'boxmirror', x, y, locked:false}); // rot parity => kind
+  else if(STATE.tool==='block') setCell({type:'block', x, y, locked:false});
+  else if(STATE.tool==='target') setCell({type:'target', x, y, id: STATE.nextTargetId++});
+  else if(STATE.tool==='erase') { /* no-op */ }
+  render();
+}
+
+function handleCellClick(x,y,evt){
+  if(STATE.suppressClick){
+    STATE.suppressClick = false;
+    return;
+  }
+  const obj = getCell(x,y);
+  const rotateIntent = evt.shiftKey;
+
+  // Alt + tık: ayna/engel kilit aç-kapat
+  if(obj && (obj.type==='mirror' || obj.type==='block') && evt.altKey){
+    obj.locked = !obj.locked;
+    setCell(obj);
+    render();
+    toast(obj.locked ? 'Kilitlendi' : 'Kilit açıldı');
+    return;
+  }
+
+  // Sağ tık zaten ayrı; burada sol tık.
+  if(STATE.tool==='erase'){
+    if(obj){ delCell(x,y); render(); toast('Silindi'); }
+    return;
+  }
+
+  if(obj){
+    // Aynı objeye tıklama: döndür (veya Shift ile zorla döndür)
+    if(obj.type==='laser' || obj.type==='mirror'){
+      rotateAt(x,y);
+      return;
+    }
+    // Diğer objeler: Shift ile "döndür" anlamsız; normalde seçili araca göre davran.
+    if(rotateIntent){
+      toast('Bu öğe döndürülemez', true);
+      return;
+    }
+    toast('Hücre dolu (Silgi veya sağ tık ile sil)', true);
+    return;
+  }
+
+  placeAt(x,y);
+}
+
+function rotateUVCW(u,v,turns,cs){
+  // Clockwise quarter-turns around the cell center in screen coordinates (y down).
+  // NOTE: The previous implementation was effectively counter-clockwise.
+  turns = ((turns%4)+4)%4;
+  if(turns===0) return {u,v};
+  if(turns===1) return {u: cs - v, v: u};
+  if(turns===2) return {u: cs - u, v: cs - v};
+  return {u: v, v: cs - u};
+}
+
+function rotateDirCW(dir, turns){
+  // Clockwise quarter-turns for axis-aligned directions.
+  turns = ((turns%4)+4)%4;
+  let i = DIRS.indexOf(dir);
+  return DIRS[(i + turns) % 4];
+}
+
+function mirrorInfo(rot){
+  // Mirror is defined in its base orientation (rot=0) as:
+  // - reflective edge (hypotenuse): '\\' diagonal => v = u
+  // - back/opaque region: top-right triangle => v <= u
+  // The SVG is rotated by rot*90deg (clockwise). To match visuals, we transform
+  // points/directions into the base frame using inv turns, do tests there, then transform back.
+  const inv = (4 - (rot % 4)) % 4;
+  return {
+    rot,
+    inv,
+    toBase: (u,v,cs)=> rotateUVCW(u,v,inv,cs),
+    fromBase: (u,v,cs)=> rotateUVCW(u,v,rot%4,cs),
+    dirToBase: (dir)=> rotateDirCW(dir, inv),
+    dirFromBase: (dir)=> rotateDirCW(dir, rot%4),
+    isBack: (u,v,cs)=>{
+      const p = rotateUVCW(u,v,inv,cs);
+      return p.v <= p.u; // base back region
+    }
+  };
+}
+
+function reflectDirRot(dir, rot){
+  // Reflect across the mirror's hypotenuse by working in base frame.
+  const inv = (4 - (rot % 4)) % 4;
+  const dBase = rotateDirCW(dir, inv);
+  // Reflect across base '\\' (v=u): swap axes => E<->S and W<->N
+  const dRefBase = ({N:'W', W:'N', S:'E', E:'S'})[dBase];
+  return rotateDirCW(dRefBase, rot%4);
+}
+
+function intersectionWithMirror(px,py,dir,gx,gy,cs,pitch,rot){
+  // Compute intersection point with the rotated hypotenuse (if any) using base-frame math.
+  const tx = gx*pitch, ty = gy*pitch;
+  const u = px - tx;
+  const v = py - ty;
+
+  const inv = (4 - (rot % 4)) % 4;
+
+  // Transform point into base frame
+  const pb = rotateUVCW(u,v,inv,cs);
+  const dirB = rotateDirCW(dir, inv);
+
+  const eps = 1e-6;
+  let ub = pb.u, vb = pb.v;
+
+  // In base: hypotenuse is '\\' => vb = ub
+  if(dirB==='E' || dirB==='W'){
+    // vb constant, solve ub = vb
+    const ui = vb;
+    if(ui < -eps || ui > cs + eps) return null;
+    if(dirB==='E' && ui <= ub + eps) return null;
+    if(dirB==='W' && ui >= ub - eps) return null;
+    const hitBase = {u: ui, v: vb};
+    const hitLocal = rotateUVCW(hitBase.u, hitBase.v, rot%4, cs);
+    return {x: tx + hitLocal.u, y: ty + hitLocal.v};
+  } else {
+    // ub constant, solve vb = ub
+    const vi = ub;
+    if(vi < -eps || vi > cs + eps) return null;
+    if(dirB==='S' && vi <= vb + eps) return null;
+    if(dirB==='N' && vi >= vb - eps) return null;
+    const hitBase = {u: ub, v: vi};
+    const hitLocal = rotateUVCW(hitBase.u, hitBase.v, rot%4, cs);
+    return {x: tx + hitLocal.u, y: ty + hitLocal.v};
+  }
+}
+
+function stepToNextCell(px,py,dir,gx,gy,cs,gap,pitch){
+  const tx = gx*pitch, ty = gy*pitch;
+  const dv = DIR_VEC[dir];
+  let exit;
+  if(dir==='E') exit = {x: tx+cs, y: py};
+  else if(dir==='W') exit = {x: tx, y: py};
+  else if(dir==='S') exit = {x: px, y: ty+cs};
+  else exit = {x: px, y: ty};
+
+  const nx = gx + dv.dx;
+  const ny = gy + dv.dy;
+  if(!inBounds(nx,ny)){
+    return { points:[exit], nx, ny, px: exit.x, py: exit.y, out:true };
+  }
+  const ntx = nx*pitch, nty = ny*pitch;
+  let entry;
+  if(dir==='E') entry = {x: ntx, y: exit.y};
+  else if(dir==='W') entry = {x: ntx+cs, y: exit.y};
+  else if(dir==='S') entry = {x: exit.x, y: nty};
+  else entry = {x: exit.x, y: nty+cs};
+  return { points:[exit, entry], nx, ny, px: entry.x, py: entry.y, out:false };
+}
+
+function updateStatus(hitIds){
+  const targets = getAllByType('target');
+  document.getElementById("status-line").textContent = `Hedef: ${hitIds.size}/${targets.length}`;
+}
+
+function drawDebugDot(ctx,x,y,r=3){
+  ctx.beginPath();
+  ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fill();
+}
+
+function drawLasers(){
+  const cv = document.getElementById("cv");
+  const ctx = cv.getContext("2d");
+  const {cs, gap, pitch} = readLayoutVars();
+
+  ctx.clearRect(0,0,cv.width,cv.height);
+  STATE.dashOffset -= 0.5;
+
+  const hitTargetIds = new Set();
+  const lasers = getAllByType('laser');
+
+  const rs = getComputedStyle(document.documentElement);
+  const targetCol = (rs.getPropertyValue('--target') || '#ffd84d').trim();
+  const debugCol = 'rgba(142,203,255,.95)';
+
+  const EPS = 1e-3 * cs;
+
+  function drawSpark(x,y){
+    ctx.save();
+    ctx.strokeStyle = targetCol;
+    ctx.setLineDash([]);
+    ctx.lineWidth = 2;
+    const r1 = 6, r2 = 12;
+    for(let i=0;i<8;i++){
+      const a = (i/8)*Math.PI*2;
+      const x1 = x + Math.cos(a)*r1;
+      const y1 = y + Math.sin(a)*r1;
+      const x2 = x + Math.cos(a)*r2;
+      const y2 = y + Math.sin(a)*r2;
+      ctx.beginPath();
+      ctx.moveTo(x1,y1);
+      ctx.lineTo(x2,y2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function rotateVecCW(dx,dy,turns){
+    turns=((turns%4)+4)%4;
+    if(turns===0) return {dx,dy};
+    // Screen coords (y down): 90° CW maps (1,0)->(0,1)
+    if(turns===1) return {dx: -dy, dy: dx};
+    if(turns===2) return {dx: -dx, dy: -dy};
+    // 270° CW
+    return {dx: dy, dy: -dx};
+  }
+
+  function intersectMirrorAny(px,py,dx,dy,gx,gy,rot){
+    // Ray starting at (px,py) inside or on boundary of cell (gx,gy) in pixels.
+    // Mirror line in base frame: v = u  (\\). We'll transform to base, intersect, reflect.
+    const tx = gx*pitch, ty = gy*pitch;
+    const u = px - tx;
+    const v = py - ty;
+
+    const inv = (4 - (rot % 4)) % 4;
+    const pB = rotateUVCW(u,v,inv,cs);
+    const dB = rotateVecCW(dx,dy,inv);
+
+    const denom = (dB.dy - dB.dx);
+    if(Math.abs(denom) < 1e-9) return null; // parallel to mirror line
+    const t = (pB.u - pB.v) / denom;
+    if(!(t > EPS)) return null;
+
+    const ub = pB.u + dB.dx * t;
+    const vb = pB.v + dB.dy * t;
+    if(ub < -1e-6 || ub > cs+1e-6 || vb < -1e-6 || vb > cs+1e-6) return null;
+
+    // Map hit back to local
+    const hitLocal = rotateUVCW(ub, vb, rot%4, cs);
+    const hx = tx + hitLocal.u;
+    const hy = ty + hitLocal.v;
+
+    // Back-face test: sample slightly BEFORE hit (incident side).
+// Eğer ışın arka (opak) taraftan geliyorsa sönümlenir.
+    const testx = hx - dx*EPS;
+    const testy = hy - dy*EPS;
+    const ut = testx - tx;
+    const vt = testy - ty;
+    const info = mirrorInfo(rot);
+    if(info.isBack(ut, vt, cs)) return {hit:{x:hx,y:hy}, blocked:true, rdx:dx, rdy:dy};
+
+    // Reflect in base across v=u => swap components
+    const dRefB = {dx: dB.dy, dy: dB.dx};
+    const dRef = rotateVecCW(dRefB.dx, dRefB.dy, rot%4);
+
+    return {hit:{x:hx,y:hy}, blocked:false, rdx:dRef.dx, rdy:dRef.dy};
+  }
+
+  function ddaNext(px,py,dx,dy,gx,gy){
+    // returns {t, nx, ny, axis:'x'|'y'|'xy', bx, by}
+    const tx = gx*pitch, ty = gy*pitch;
+    const xBound = dx>0 ? (tx+cs) : (dx<0 ? tx : null);
+    const yBound = dy>0 ? (ty+cs) : (dy<0 ? ty : null);
+
+    const tX = (xBound===null) ? Infinity : ((xBound - px) / dx);
+    const tY = (yBound===null) ? Infinity : ((yBound - py) / dy);
+
+    const t = Math.min(tX, tY);
+    if(!isFinite(t)) return {t:Infinity, nx:gx, ny:gy, axis:'', bx:px, by:py};
+
+    const nx = gx + (tX < tY ? Math.sign(dx) : (tX > tY ? 0 : Math.sign(dx)));
+    const ny = gy + (tY < tX ? Math.sign(dy) : (tY > tX ? 0 : Math.sign(dy)));
+    const axis = (Math.abs(tX - tY) < 1e-9) ? 'xy' : (tX < tY ? 'x' : 'y');
+
+    return {t, nx, ny, axis, bx: px + dx*t, by: py + dy*t};
+  }
+
+  for(const laser of lasers){
+    let dir = laser.dir;
+    let v = DIR_VEC8[dir] || {dx:1,dy:0};
+    // pixel direction components: for diagonals use normalized? not required for DDA, just consistent.
+    let dx = v.dx, dy = v.dy;
+
+    // start at center of emitter cell
+    let px = laser.x*pitch + cs/2;
+    let py = laser.y*pitch + cs/2;
+    let gx = laser.x, gy = laser.y;
+
+    const pts = [{x:px,y:py}];
+    const dbgDots = [];
+    let spark = null;
+
+    const maxSteps = STATE.rows * STATE.cols * 30;
+    for(let step=0; step<maxSteps; step++){
+      if(!inBounds(gx,gy)) break;
+
+      // Mirror hit in current cell (but ignore emitter cell object itself)
+      const objHere = getCell(gx,gy);
+      const isEmitterCell = (gx===laser.x && gy===laser.y);
+
+      if(objHere && !isEmitterCell && objHere.type==='mirror'){
+        const inter = intersectMirrorAny(px,py,dx,dy,gx,gy,objHere.rot||0);
+        if(inter && inter.hit){
+          pts.push({x: inter.hit.x, y: inter.hit.y});
+          if(STATE.debug) dbgDots.push({x:inter.hit.x,y:inter.hit.y,r:3,col:debugCol});
+
+          if(inter.blocked){
+            pts.push({x: inter.hit.x + dx*EPS, y: inter.hit.y + dy*EPS});
+            break;
+          }
+          // bounce
+          dx = inter.rdx; dy = inter.rdy;
+          px = inter.hit.x + dx*EPS;
+          py = inter.hit.y + dy*EPS;
+          continue;
+        }
+      }
+
+      // Step to boundary of current cell
+      const nxt = ddaNext(px,py,dx,dy,gx,gy);
+      if(!isFinite(nxt.t) || nxt.t===Infinity) break;
+
+      // Determine if we're going out of bounds
+      const out = !inBounds(nxt.nx, nxt.ny);
+
+      // If next cell contains an object, handle before entering (at boundary point)
+      const nextObj = out ? null : getCell(nxt.nx, nxt.ny);
+
+      if(nextObj){
+        if(nextObj.type==='block'){
+          pts.push({x:nxt.bx, y:nxt.by});
+          break;
+        }
+        if(nextObj.type==='target'){
+          const tx = nxt.nx*pitch, ty = nxt.ny*pitch;
+          const cx = tx + cs/2, cy = ty + cs/2;
+          pts.push({x: cx, y: cy});
+          hitTargetIds.add(nextObj.id);
+          spark = {x: cx, y: cy};
+          break;
+        }
+        if(nextObj.type==='mirror'){
+          // we will enter mirror cell; add boundary point, then nudge inside and continue; intersection will be detected next loop.
+          pts.push({x:nxt.bx, y:nxt.by});
+          gx = nxt.nx; gy = nxt.ny;
+          px = nxt.bx + dx*EPS;
+          py = nxt.by + dy*EPS;
+          continue;
+        }
+        // laser or others: treat as empty
+      }
+
+      // No blocking object
+      pts.push({x:nxt.bx, y:nxt.by});
+      if(STATE.debug) dbgDots.push({x:nxt.bx,y:nxt.by,r:2.5,col:'rgba(255,79,216,.7)'});
+
+      if(out) break;
+
+      gx = nxt.nx; gy = nxt.ny;
+      px = nxt.bx + dx*EPS;
+      py = nxt.by + dy*EPS;
+    }
+
+    // draw polyline
+    if(pts.length >= 2){
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.strokeStyle = "#ff4fd8";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([12, 6]);
+      ctx.lineDashOffset = STATE.dashOffset;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if(spark) drawSpark(spark.x, spark.y);
+
+    if(STATE.debug && dbgDots.length){
+      ctx.save();
+      for(const d of dbgDots){
+        ctx.fillStyle = d.col || debugCol;
+        drawDebugDot(ctx, d.x, d.y, d.r || 3);
+      }
+      ctx.restore();
+    }
+  }
+
+  updateStatus(hitTargetIds);
+
+  if(!STATE.hitEverIds) STATE.hitEverIds = new Set();
+  let anyNew = false;
+  for(const id of hitTargetIds){
+    if(!STATE.hitEverIds.has(id)){
+      STATE.hitEverIds.add(id);
+      anyNew = true;
+    }
+  }
+  if(anyNew){
+    showWinModal('Hedefe Ulaştınız');
+  }
+}
+
+
+
+// ===== GRID BOYUTU =====
+function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
+
+function setGridSize(rows, cols){
+  rows = clamp(parseInt(rows,10)||8, 4, 16);
+  cols = clamp(parseInt(cols,10)||8, 4, 16);
+
+  STATE.rows = rows;
+  STATE.cols = cols;
+
+  // Taşan objeleri temizle
+  for(const obj of Array.from(STATE.gridMap.values())){
+    if(!inBounds(obj.x, obj.y)){
+      delCell(obj.x, obj.y);
+    }
+  }
+  render();
+  refreshSlotInfo();
+}
+
+function initGridUI(){
+  const r=document.getElementById('rowsInp');
+  const c=document.getElementById('colsInp');
+  if(r) r.value = String(STATE.rows);
+  if(c) c.value = String(STATE.cols);
+
+  document.getElementById('btn-applyGrid')?.addEventListener('click', ()=>{
+    setGridSize(r?.value, c?.value);
+    toast('Grid güncellendi.');
+  });
+  document.getElementById('btn-fit8')?.addEventListener('click', ()=>{
+    if(r) r.value='8';
+    if(c) c.value='8';
+    setGridSize(8,8);
+    toast('8×8');
+  });
+}
+
+
+function animate(){
+  drawLasers();
+  requestAnimationFrame(animate);
+}
+
+// Canvas hizası: grid boyutu değişince güncelle
+const ro = new ResizeObserver(() => {
+  syncCanvasToGrid();
+});
+ro.observe(document.getElementById('grid'));
+
+document.addEventListener('keydown', (e)=>{
+  // Hızlı tool geçişi
+  if(e.key==='1') setTool('laser');
+  if(e.key==='2') setTool('target');
+  if(e.key==='3') setTool('mirror');
+  if(e.key==='4') setTool('block');
+  if(e.key==='5') setTool('erase');
+  if(e.key==='d' || e.key==='D') toggleDebug();
+});
+
+// Sürükleme dinleyicileri (ayna taşıma)
+document.addEventListener('pointermove', handlePointerMove, {passive:true});
+document.addEventListener('pointerup', handlePointerUp, {passive:true});
+document.addEventListener('pointercancel', handlePointerUp, {passive:true});
+
+initModal();
+initLevelUI();
+initBulkUI();
+initGridUI();
+setTool('laser');
+render();
+animate();
+
+
+// ===== BULK EXPORT / IMPORT (kalıcı localStorage) =====
+function countFilledSlots(){
+  try{ return Object.keys(loadAllSlots()).length; }catch(_){ return 0; }
+}
+function refreshBulkInfo(){
+  const el = document.getElementById('bulkInfo');
+  if(el) el.innerHTML = `Kayıtlı slot: <b>${countFilledSlots()}</b>`;
+}
+function downloadJSON(filename, obj){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 500);
+}
+function exportAllSlots(){
+  const payload = {
+    version: 1,
+    storageKey: STORAGE_KEY,
+    exportedAt: new Date().toISOString(),
+    slots: loadAllSlots()
+  };
+  downloadJSON('laser-maze-levels-export.json', payload);
+  toast('Tüm bölümler indirildi.');
+}
+function importAllSlotsFromObject(payload){
+  if(!payload || typeof payload !== 'object') throw new Error('Geçersiz JSON');
+  const incoming = (payload.slots && typeof payload.slots === 'object') ? payload.slots : payload;
+  const current = loadAllSlots();
+  const merged = { ...current, ...incoming }; // merge: gelenler aynı anahtarda üstüne yazar
+  saveAllSlots(merged); // kalıcı
+  refreshSlotInfo();
+  refreshBulkInfo();
+  toast('Import tamamlandı ve kaydedildi.');
+}
+function initBulkUI(){
+  document.getElementById('btn-exportAll')?.addEventListener('click', exportAllSlots);
+
+  const fileInput = document.getElementById('fileImport');
+  document.getElementById('btn-importAll')?.addEventListener('click', ()=> fileInput?.click());
+
+  fileInput?.addEventListener('change', async ()=>{
+    const f = fileInput.files?.[0];
+    if(!f) return;
+    try{
+      const text = await f.text();
+      const json = JSON.parse(text);
+      importAllSlotsFromObject(json);
+    }catch(_){
+      toast('Import hata (geçersiz dosya)', true);
+    }finally{
+      fileInput.value = '';
+    }
+  });
+
+  document.getElementById('btn-clearAll')?.addEventListener('click', ()=>{
+    localStorage.removeItem(STORAGE_KEY);
+    refreshSlotInfo();
+    refreshBulkInfo();
+    toast('Tüm slotlar silindi.');
+  });
+
+  refreshBulkInfo();
+}
+
+</script>
+
+<div id="winModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+  <div class="modal-card">
+    <div id="winTitle" class="modal-title">Hedefe Ulaştınız</div>
+    <div id="winMsg" class="modal-msg">Tebrikler!</div>
+    <button id="winOk" class="btn">Tamam</button>
+  </div>
+</div>
+</body>
+</html>

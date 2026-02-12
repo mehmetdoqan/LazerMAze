@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "storageKey": "laserMaze.levels.v1",
+  "exportedAt": "2026-02-11T06:31:21.896Z",
+  "slots": {
+    "kolay:1": {
+      "rows": 8,
+      "cols": 8,
+      "items": [
+        {
+          "type": "laser",
+          "x": 0,
+          "y": 0,
+          "dir": "E"
+        },
+        {
+          "type": "mirror",
+          "x": 6,
+          "y": 0,
+          "rot": 0
+        },
+        {
+          "type": "mirror",
+          "x": 6,
+          "y": 5,
+          "rot": 2
+        },
+        {
+          "type": "target",
+          "x": 0,
+          "y": 5,
+          "id": 1
+        }
+      ]
+    },
+    "kolay:2": {
+      "rows": 8,
+      "cols": 8,
+      "items": [
+        {
+          "type": "laser",
+          "x": 0,
+          "y": 0,
+          "dir": "E"
+        },
+        {
+          "type": "mirror",
+          "x": 6,
+          "y": 0,
+          "rot": 1
+        },
+        {
+          "type": "mirror",
+          "x": 6,
+          "y": 5,
+          "rot": 3
+        },
+        {
+          "type": "mirror",
+          "x": 2,
+          "y": 5,
+          "rot": 0
+        },
+        {
+          "type": "target",
+          "x": 2,
+          "y": 3,
+          "id": 3
+        }
+      ]
+    },
+    "kolay:3": {
+      "rows": 8,
+      "cols": 8,
+      "items": [
+        {
+          "type": "laser",
+          "x": 0,
+          "y": 0,
+          "dir": "S"
+        },
+        {
+          "type": "target",
+          "x": 0,
+          "y": 6,
+          "id": 5
+        },
+        {
+          "type": "mirror",
+          "x": 0,
+          "y": 3,
+          "rot": 0
+        }
+      ]
+    },
+    "kolay:4": {
+      "rows": 8,
+      "cols": 8,
+      "items": [
+        {
+          "type": "target",
+          "x": 0,
+          "y": 6,
+          "id": 5
+        },
+        {
+          "type": "mirror",
+          "x": 0,
+          "y": 3,
+          "rot": 0
+        },
+        {
+          "type": "laser",
+          "x": 4,
+          "y": 7,
+          "dir": "N"
+        }
+      ]
+    }
+  }
+}
